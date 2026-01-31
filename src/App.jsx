@@ -1,62 +1,208 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+
+const ASSETS = ["BTC", "ETH", "SOL"];
+const STORAGE_KEY = "crypto_portfolio_v1";
 
 export default function App() {
-  const asset = {
-    name: "Ethereum",
-    score: 82,
-    recommendation: "استثمار جيد",
-    risk: "متوسط",
-    thesis:
-      "Ethereum يتمتع بأساسيات قوية على المدى المتوسط والطويل بفضل نشاط التطوير العالي واعتماده الواسع في تطبيقات DeFi وNFT، مع وجود مخاطر تنظيمية متوسطة.",
-    breakdown: [
-      { label: "Fundamentals", value: 34 },
-      { label: "Adoption", value: 16 },
-      { label: "Valuation", value: 12 },
-      { label: "Market Sentiment", value: 12 },
-      { label: "Risk", value: 8 }
-    ]
+  const [selectedAsset, setSelectedAsset] = useState("ETH");
+
+  const [portfolio, setPortfolio] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : { BTC: [], ETH: [], SOL: [] };
+  });
+
+    const [prices, setPrices] = useState({ BTC: 0, ETH: 0, SOL: 0 });
+
+  // 🔄 جلب الأسعار الحالية تلقائيًا من CoinGecko
+useEffect(() => {
+  const fetchPrices = async () => {
+    try {
+      const res = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd"
+      );
+      const data = await res.json();
+
+      setPrices({
+        BTC: data.bitcoin.usd,
+        ETH: data.ethereum.usd,
+        SOL: data.solana.usd,
+      });
+    } catch (error) {
+      console.error("Failed to fetch prices", error);
+    }
   };
+
+  fetchPrices();
+}, []);
+
+
+  const today = new Date().toISOString().split("T")[0];
+  const [form, setForm] = useState({ amount: "", price: "", date: today });
+
+  const addPurchase = () => {
+    if (!form.amount || !form.price || !form.date) return;
+
+    setPortfolio({
+      ...portfolio,
+      [selectedAsset]: [
+        ...portfolio[selectedAsset],
+        { id: Date.now(), ...form, amount: Number(form.amount), price: Number(form.price) }
+      ]
+    });
+
+    setForm({ amount: "", price: "", date: today });
+  };
+
+  const deletePurchase = (id) => {
+    setPortfolio({
+      ...portfolio,
+      [selectedAsset]: portfolio[selectedAsset].filter(p => p.id !== id)
+    });
+  };
+
+  const updatePurchase = (id, field, value) => {
+    setPortfolio({
+      ...portfolio,
+      [selectedAsset]: portfolio[selectedAsset].map(p =>
+        p.id === id ? { ...p, [field]: field === "date" ? value : Number(value) } : p
+      )
+    });
+  };
+
+  const calcStats = (purchases, currentPrice) => {
+    const totalAmount = purchases.reduce((s, p) => s + p.amount, 0);
+    const totalCost = purchases.reduce((s, p) => s + p.amount * p.price, 0);
+    const avgPrice = totalAmount ? totalCost / totalAmount : 0;
+    const currentValue = currentPrice ? totalAmount * currentPrice : 0;
+    const pnl = currentValue - totalCost;
+    const pnlPct = totalCost ? (pnl / totalCost) * 100 : 0;
+
+    return { totalAmount, totalCost, avgPrice, currentValue, pnl, pnlPct };
+  };
+
+  const tableData = ASSETS.map((asset) => {
+    const stats = calcStats(portfolio[asset], Number(prices[asset]));
+    return { asset, ...stats, price: prices[asset] };
+  }).sort((a, b) => b.currentValue - a.currentValue);
+
+  const purchases = portfolio[selectedAsset];
+  const stats = calcStats(purchases, Number(prices[selectedAsset]));
 
   return (
     <div style={{ padding: 40, fontFamily: "Arial, sans-serif" }}>
-      <h1>📊 Crypto AI Investment Dashboard</h1>
+      <h1>💼 Crypto Portfolio Tracker</h1>
 
+      {/* جدول ترتيب العملات */}
       <section style={{ marginTop: 30 }}>
-        <h2>{asset.name}</h2>
-        <p><strong>Investment Score:</strong> {asset.score} / 100</p>
-        <p><strong>Recommendation:</strong> {asset.recommendation}</p>
-        <p><strong>Risk Level:</strong> {asset.risk}</p>
+        <h2>📋 ملخص المحفظة (مرتّب حسب المبلغ الحالي)</h2>
+        <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead>
+            <tr>
+              <th>العملة</th>
+              <th>متوسط الشراء</th>
+              <th>إجمالي المستثمر</th>
+              <th>السعر الحالي</th>
+              <th>المبلغ الحالي</th>
+              <th>الربح / الخسارة</th>
+              <th>% الربح</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tableData.map(row => (
+              <tr key={row.asset}>
+                <td>{row.asset}</td>
+                <td>{row.avgPrice.toFixed(2)}</td>
+                <td>{row.totalCost.toFixed(2)}</td>
+                <td>
+                  <input
+                    style={{ width: 80 }}
+                    value={prices[row.asset]}
+                    onChange={(e) => setPrices({ ...prices, [row.asset]: e.target.value })}
+                  />
+                </td>
+                <td>{row.currentValue.toFixed(2)}</td>
+                <td style={{ color: row.pnl >= 0 ? "green" : "red" }}>
+                  {row.pnl.toFixed(2)}
+                </td>
+                <td style={{ color: row.pnl >= 0 ? "green" : "red" }}>
+                  {row.pnlPct.toFixed(2)}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </section>
 
+      {/* اختيار عملة */}
       <section style={{ marginTop: 30 }}>
-        <h3>📈 Investment Score Breakdown</h3>
-        {asset.breakdown.map((item) => (
-          <div key={item.label} style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>{item.label}</span>
-              <span>{item.value}</span>
-            </div>
-            <div style={{ background: "#eee", height: 8 }}>
-              <div
-                style={{
-                  width: `${item.value * 2.5}%`,
-                  height: 8,
-                  background: "#4caf50"
-                }}
-              />
-            </div>
-          </div>
-        ))}
+        <h2>🪙 اختيار العملة</h2>
+        <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)}>
+          {ASSETS.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
       </section>
 
+      {/* إضافة شراء */}
       <section style={{ marginTop: 30 }}>
-        <h3>🧠 AI Investment Thesis</h3>
-        <p>{asset.thesis}</p>
+        <h2>➕ إضافة عملية شراء ({selectedAsset})</h2>
+        <input
+          placeholder="الكمية"
+          value={form.amount}
+          onChange={(e) => setForm({ ...form, amount: e.target.value })}
+        />{" "}
+        <input
+          placeholder="سعر الشراء"
+          value={form.price}
+          onChange={(e) => setForm({ ...form, price: e.target.value })}
+        />{" "}
+        <input
+          type="date"
+          value={form.date}
+          onChange={(e) => setForm({ ...form, date: e.target.value })}
+        />{" "}
+        <button onClick={addPurchase}>إضافة</button>
       </section>
 
-      <section style={{ marginTop: 40, color: "green" }}>
-        <strong>✔ Dashboard يعمل بنجاح</strong>
+      {/* تفاصيل العملة المختارة */}
+      <section style={{ marginTop: 30 }}>
+        <h2>📊 تفاصيل — {selectedAsset}</h2>
+        <p>إجمالي الكمية: {stats.totalAmount}</p>
+        <p>إجمالي المستثمر: {stats.totalCost.toFixed(2)}</p>
+        <p>متوسط الشراء: {stats.avgPrice.toFixed(2)}</p>
+        <p>المبلغ الحالي: {stats.currentValue.toFixed(2)}</p>
+        <p style={{ color: stats.pnl >= 0 ? "green" : "red" }}>
+          الربح / الخسارة: {stats.pnl.toFixed(2)} ({stats.pnlPct.toFixed(2)}%)
+        </p>
+
+        <h3>🧾 سجل المشتريات</h3>
+        <table border="1" cellPadding="6" style={{ borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>الكمية</th>
+              <th>السعر</th>
+              <th>حذف</th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchases.map(p => (
+              <tr key={p.id}>
+                <td>{p.date}</td>
+                <td>{p.amount}</td>
+                <td>{p.price}</td>
+                <td>
+                  <button onClick={() => deletePurchase(p.id)}>🗑️</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </section>
+
+      <p style={{ marginTop: 40, color: "green" }}>
+        ✔ يتم حفظ البيانات تلقائيًا على هذا الجهاز
+      </p>
     </div>
   );
 }
