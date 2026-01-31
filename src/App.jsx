@@ -77,8 +77,27 @@ useEffect(() => {
     const pnl = currentValue - totalCost;
     const pnlPct = totalCost ? (pnl / totalCost) * 100 : 0;
 
-    return { totalAmount, totalCost, avgPrice, currentValue, pnl, pnlPct };
-  };
+// 🧠 AI Investment Score (0 - 100) + Recommendation
+const getInvestmentInsight = (stats) => {
+  let score = 50;
+  let recommendation = "Hold";
+
+  // خصم أو إضافة حسب الأداء
+  if (stats.pnlPct > 30) score += 20;
+  else if (stats.pnlPct > 10) score += 10;
+  else if (stats.pnlPct < -20) score -= 20;
+  else if (stats.pnlPct < -10) score -= 10;
+
+  // حماية من المبالغة
+  score = Math.max(0, Math.min(100, score));
+
+  // توصية استثمارية
+  if (score >= 70) recommendation = "🟢 Long-term Buy / Strong Hold";
+  else if (score >= 50) recommendation = "🟡 Hold / Accumulate";
+  else recommendation = "🔴 High Risk / Re-evaluate";
+
+  return { score, recommendation };
+};
 
   const tableData = ASSETS.map((asset) => {
     const stats = calcStats(portfolio[asset], Number(prices[asset]));
